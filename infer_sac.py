@@ -5,7 +5,7 @@ import gymnasium as gym
 from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
-from sac_rgbd_copy import Actor, Args  # Ensure sac_rgbd.py is in the same directory
+from sac_rgbd_copy import Actor, Args  
 
 def evaluate_model(args, checkpoint_path):
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
@@ -15,7 +15,7 @@ def evaluate_model(args, checkpoint_path):
         obs_mode=args.obs_mode, 
         render_mode=args.render_mode, 
         sim_backend="gpu",
-        control_mode=args.control_mode  # Ensuring control mode matches training
+        control_mode=args.control_mode  
     )
     eval_env = gym.make(args.env_id, num_envs=1, **env_kwargs)
     eval_env = FlattenRGBDObservationWrapper(eval_env, rgb=True, depth=False, state=args.include_state)
@@ -29,15 +29,12 @@ def evaluate_model(args, checkpoint_path):
     # Print action space to verify dimensions
     print(f"Action space during evaluation: {eval_env.single_action_space.shape}")
 
-    # Load model checkpoint
     checkpoint = torch.load(checkpoint_path)
 
-    # Initialize actor and load weights
     obs, _ = eval_env.reset()
     actor = Actor(eval_env, sample_obs=obs).to(device)
 
     try:
-        # Load model strictly, will raise an error if mismatched
         actor.load_state_dict(checkpoint['actor'])
     except RuntimeError as e:
         print(f"Strict load failed with error: {e}")
@@ -71,9 +68,8 @@ if __name__ == "__main__":
         cuda=True,
         evaluate=True,
         num_eval_steps=200,
-        control_mode="pd_ee_delta_pos"  # Ensure this matches your training config
+        control_mode="pd_ee_delta_pos"  
     )
 
-    # Specify your checkpoint path here
     checkpoint_path = "best_chkpts/dense_ckpt_440k_43.pt"
     evaluate_model(args, checkpoint_path)

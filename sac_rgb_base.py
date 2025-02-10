@@ -1,12 +1,3 @@
-"""
-python sac_replay.py --env_id="PickCube-v1" --obs_mode="rgb" --num_envs=1 --utd=0.5 
---buffer_size=300000 --control_mode="pd_ee_delta_pos" 
---camera_width=64 --camera_height=64 --total_timesteps=1000000 --eval_freq=10000
-
-If "expert_buffer.pt" exists, it loads that buffer instead of creating an empty one.
-Otherwise, it's the same logic as the original sac_rgbd.py.
-"""
-
 import os
 import random
 import time
@@ -30,9 +21,7 @@ from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 
 import mani_skill.envs
 
-# -----------------------------------------------------------------------------------
-# Hyperparameters and arguments (as in original)
-# -----------------------------------------------------------------------------------
+# Hyperparameters
 
 torch.cuda.empty_cache()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -92,9 +81,7 @@ grad_steps_per_iteration: int = 0
 steps_per_env: int = 0
 
 
-# -----------------------------------------------------------------------------------
-# Replay buffer & data structures
-# -----------------------------------------------------------------------------------
+# Replay buffer 
 class DictArray(object):
     def __init__(self, buffer_shape, element_space, data_dict=None, device=None):
         self.buffer_shape = buffer_shape
@@ -248,9 +235,7 @@ class ReplayBuffer:
         )
 
 
-# -----------------------------------------------------------------------------------
-# Network definitions (PlainConv, SoftQNetwork, Actor)
-# -----------------------------------------------------------------------------------
+# Neural Network definitions
 def make_mlp(in_channels, mlp_channels, act_builder=nn.ReLU, last_act=True):
     c_in = in_channels
     module_list = []
@@ -347,7 +332,6 @@ class SoftQNetwork(nn.Module):
         self.encoder = encoder
         action_dim = np.prod(envs.single_action_space.shape)
         state_dim = envs.single_observation_space["state"].shape[0]
-        # Use the out_dim from PlainConv
         self.mlp = make_mlp(
             self.encoder.encoder.out_dim + action_dim + state_dim,
             [512, 256, 1],
@@ -375,7 +359,6 @@ class Actor(nn.Module):
         state_dim = envs.single_observation_space["state"].shape[0]
         in_channels = 0
 
-        # figure out image shape
         if "rgb" in sample_obs:
             in_channels += sample_obs["rgb"].shape[-1]
             image_size = sample_obs["rgb"].shape[1:3]
@@ -453,11 +436,8 @@ class Logger:
             self.writer.close()
 
 
-# -----------------------------------------------------------------------------------
-# MAIN: minimal changes to load a pre-filled replay buffer if present
-# -----------------------------------------------------------------------------------
+# Main code
 if __name__ == "__main__":
-    # same logic: computing grad_steps_per_iteration, steps_per_env, run_name, seeding, etc.
     grad_steps_per_iteration = int(training_freq * utd)
     steps_per_env = training_freq // num_envs
     if exp_name is None:
@@ -473,7 +453,6 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and cuda else "cpu")
 
-    # ---------- Environment setup (unchanged) ----------
     env_kwargs = dict(obs_mode=obs_mode, render_mode=render_mode, sim_backend="gpu", sensor_configs=dict())
     if control_mode is not None:
         env_kwargs["control_mode"] = control_mode
@@ -536,7 +515,6 @@ if __name__ == "__main__":
     logger = None
     if not evaluate:
         print("Running training")
-        # optional W&B
         if track:
             import wandb
 
@@ -574,13 +552,10 @@ if __name__ == "__main__":
 
     envs.single_observation_space.dtype = np.float32
 
-    # === Minimal change: check for an expert buffer file ===
     expert_buffer_file = "expert_buffer_sparse_64_nf.pt"
     if os.path.exists(expert_buffer_file):
         print(f"Found replay buffer file {expert_buffer_file}. Loading with weights_only=False ...")
-        # Important: we set weights_only=False so we can unpickle the entire ReplayBuffer object
         rb = torch.load(expert_buffer_file, weights_only=False)
-        # Ensure we sample to 'device'
         rb.sample_device = device
         rb.storage_device=device
 
@@ -600,7 +575,6 @@ if __name__ == "__main__":
     obs, info = envs.reset(seed=seed)
     eval_obs, _ = eval_envs.reset(seed=seed)
 
-    # architecture same as original
     actor = Actor(envs, sample_obs=obs).to(device)
     qf1 = SoftQNetwork(envs, actor.encoder).to(device)
     qf2 = SoftQNetwork(envs, actor.encoder).to(device)
@@ -643,7 +617,6 @@ if __name__ == "__main__":
     pbar = tqdm.tqdm(range(total_timesteps))
     cumulative_times = defaultdict(float)
 
-    # Main training loop, unchanged
     while global_step < total_timesteps:
         if eval_freq > 0 and (global_step - training_freq) // eval_freq < global_step // eval_freq:
             # evaluation
